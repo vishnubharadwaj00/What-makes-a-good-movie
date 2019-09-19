@@ -1,0 +1,376 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+Let us load in the packages that we need for this project. The 3 packages which we have already been using so far, ggplot2 for plotting, dplyr for data manipulation and statsr for the statistical function, will encompass most of the necessary functions required for this project. GridExtra is also used for plotting, as will be seen.
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+The data can be loaded in 2 ways: 
+1)By going to File->Open File and then selecting on the RData file.
+2)Using the load() function
+
+The data will be loaded in with the name 'movies'.
+
+The second method is used here:
+
+```{r load-data}
+load("movies.Rdata")
+dim(movies)
+```
+
+The data has 651 rows and 32 columns.
+
+* * *
+
+## Part 1: Data
+
+As given in the Codebook for the dataset: "The data set is comprised of 651 randomly sampled movies produced and released before 2016." This means that random sampling is definitely involved in selecting the 651 movies. The results from the project can be generalized to the entire population of movies.
+
+But we cannot be 100% sure of generalizability because it is entirely possible that the movies that only did well in the theatres may be included, and not the movies that didn't make it on the imdb and Rotten Tomatoes list. 
+
+Random assignment has not been used, as there is no grouping of the movies done. So we cannot infer causality from the results of this analysis. 
+
+* * *
+
+## Part 2: Research question
+
+Movies play a big part of our lives, from the start to the end. Some movies are not all that extraordinary and then there are some which completely change our lives. Obviously, each of us have our own metrics of a good movie. But overall, the best movies are accepted as the best by a good majority of people. So what makes it a good movie?
+
+**Is it possible to predict the audience score, based on combination of features (e.g. genre, reviews, runtime, release date, etc.)?**
+
+In other words, is there a correlation between audience score and one or more of the features present in the dataset(genre,reviews,runtime,release date, etc.)
+
+This question is important to both audiences as well as the people who make the movie. For the people who make the movie, it's a question of optimization to increase their profits. For audiences, it's to choose from the plethora of options readily available today. 
+
+We will not be using the last few variables in the dataset, such as director, actor1 to actor5 and the URLs as they have no use in the analysis. We can remove them altogether, for simplicity's sake:
+
+```{r}
+mov=movies[1:24]
+dim(mov)
+```
+
+The last 8 rows have been removed. 
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+First, let us check the NAs in each of the remaining columns: 
+```{r}
+sapply(mov, function(x) sum(is.na(x)))
+```
+
+Let's remove the row with the NA in runtime, as we will be using runtime. The other variables such as studio and dvd_rel will not be used for now.
+
+```{r}
+mov=mov %>% filter(runtime!="NA")
+dim(mov)
+```
+
+The row has been removed. 
+
+There are a lot of variables to be used. So I will be using only those I think are more relevant for this EDA, but in the final model, all those variables will be used.
+
+The variables I will be focusing on are: runtime, mpaa_rating, thtr_rel_year, best_pic_nom and best_pic_win.
+
+The reason for choosing variables to plot is that they have either numerical values or have very few categories, leading to unmessy plots. Otherwise, with too many categories, such as genre, will lead to a very cluttered and messy plot.
+
+But before that, let us check the summary statistics of those variables:
+
+```{r}
+summary(mov$runtime)
+```
+
+The lowest runtime is 39 minutes and the highest is 267 minutes, with a mean of 105.8 minutes.
+
+```{r}
+summary(mov$mpaa_rating)
+```
+
+R rated movies are the majority, and NC-17 and G rated are the least.
+
+```{r}
+summary(mov$thtr_rel_year)
+```
+
+The earliest movie is from 1970 and the latest is from 2004, with a median of 2000, showing that there have been a lot more movies recently. 
+
+```{r}
+summary(mov$best_pic_nom)
+```
+
+Only 22 of the 650 movies have been nominated for the best picture.
+
+```{r}
+summary(mov$best_pic_win)
+```
+
+Out of the 22 movies, only 7 have won the best picture.
+
+Let's create a scatterplot for each individual variable, with the y axis being the imdb_rating and the critics_score. 
+
+*Runtime & MPAA Rating*
+
+```{r}
+g1=ggplot(data=mov,aes(x=runtime,y=imdb_rating))+geom_jitter()
+g2=ggplot(data=mov,aes(x=runtime,y=critics_score))+geom_jitter()
+g3=ggplot(data=mov,aes(x=mpaa_rating,y=imdb_rating))+geom_jitter()
+g4=ggplot(data=mov,aes(x=mpaa_rating,y=critics_score))+geom_jitter()
+
+grid.arrange(g1,g2,g3,g4,ncol=2)
+```
+
+Immediately we can see that the runtime is clustered around 100-120 minutes, and it doesn't have that much of an impact on the rating. We can also see one outlier, with a runtime well beyond 200 minutes.
+
+```{r}
+max(mov$runtime)
+mov$title[which.max(mov$runtime)]
+```
+
+We can see that with a runtime of 267 minutes, Hotel Terminus actually does pretty well in the scores. 
+
+Also the MPAA ratings make it clear that G rated movies aren't as likely as an R-rated or unrated movie to get a higher score.
+
+*Theatre Release Date, Best Pic Nomination & Best Pic Win*
+
+```{r}
+g5=ggplot(data=mov,aes(x=thtr_rel_year,y=imdb_rating))+geom_jitter()
+g6=ggplot(data=mov,aes(x=thtr_rel_year,y=critics_score))+geom_jitter()
+g7=ggplot(data=mov,aes(x=best_pic_nom,y=imdb_rating,color=best_pic_win))+geom_jitter()
+g8=ggplot(data=mov,aes(x=best_pic_nom,y=critics_score,color=best_pic_win))+geom_jitter()
+
+grid.arrange(g5,g6,g7,g8,ncol=2)
+```
+
+We can see that there are more movies as time progresses, but whether it affects the ratings is not quite evident. 
+
+And the movies which have a best picture nomination (22 of them), are sure to do well. There is an evident outlier in the "yes" category of Rotten Tomatoes score, which is well below the rest. 
+
+```{r}
+mov %>%
+  filter(best_pic_nom=="yes") %>%
+  summarise(minmovie=title[which(critics_score==min(critics_score))])
+```
+
+So "A Star is Born" seems to have done badly, despite being nominated.
+
+And the movies which win the best picture obviously do well in the ratings as well, as seen.
+
+Let us check the correlation and scatter for the variables with each other:
+
+```{r}
+pairs(~runtime+mpaa_rating+thtr_rel_year+best_pic_nom+best_pic_win,data=mov)
+
+```
+
+We get a scatterplot of each of the variables.
+* * *
+
+## Part 4: Modeling
+
+Let us fit a model to predict the imdb score given some variables. We will start with 11 variables and then use the backward selection method to eliminate the insignifcant variables, and end up with the optimum model. 
+
+We have not chosen best_pic_win as it might lead to some collinearity with best_pic_nom, and since best_pic_nom has more "yes" values, we have included it in the model.
+
+```{r}
+lm1=lm(imdb_rating~genre+runtime+mpaa_rating+thtr_rel_year+best_pic_nom+best_actor_win+best_actress_win+best_dir_win,data=mov)
+summary(lm1)
+```
+
+The adjusted $R^2$ value is 0.3057. Using the p-value method, the highest p-value is best_actress_win. Let us remove that and fit a model again:
+
+```{r}
+lm2=lm(imdb_rating~genre+runtime+mpaa_rating+thtr_rel_year+best_pic_nom+best_actor_win+best_dir_win,data=mov)
+summary(lm2)
+```
+
+The adjusted $R^2$ value is 0.3068, which is a marginal increase. The next highest p-value is best_actor_win, which we remove:
+
+```{r}
+lm3=lm(imdb_rating~genre+runtime+mpaa_rating+thtr_rel_year+best_pic_nom+best_dir_win,data=mov)
+summary(lm3)
+```
+
+The adjusted $R^2$ value increases marginally again to 0.3078. The next highest p-value is thtr_rel_year. Removing that and building a model:
+
+```{r}
+lm4=lm(imdb_rating~genre+runtime+mpaa_rating+best_pic_nom+best_dir_win,data=mov)
+summary(lm4)
+```
+
+The adjusted $R^2$ value increases marginally again. The remaining variables are all significant or have other categories that are significant. But, just for completeness, let us remove the best_dir_win variable, which does not have a highly significant value, and see if it makes a positive or negative difference: 
+
+```{r}
+lm5=lm(imdb_rating~genre+runtime+mpaa_rating+best_pic_nom,data=mov)
+summary(lm5)
+```
+
+The adjusted $R^2$ value drops down to a much lower value than the original model, meaning we have taken a step in the wrong direction. So the model, lm4, is the most optimum model out of the variables we had initially chosen. 
+
+The variables that remain are: genre, runtime, mpaa_rating, best_pic_nom and best_dir_win.
+
+The coefficients of the model are: 
+
+```{r}
+lm4$coefficients
+```
+
+We cannot plot the model as such because it has a lot of variables. But we can check the diagnostics of the model:
+
+**Model Diagnostics**
+
+*1.Linear relationship*
+
+Here, the only numerical variable is runtime, so we will plot that against the residuals:
+
+```{r}
+plot(lm4$residuals~mov$runtime)
+```
+
+We do see some random scatter, although the outlier of 267 minutes makes it seem like a single cluster. 
+
+*2. Nearly normal residuals with mean 0*
+
+The histogram of the residuals:
+
+```{r}
+hist(lm4$residuals)
+```
+
+It is nearly normal with mean around 0.
+
+Checking the normal probability plot:
+
+```{r}
+qqnorm(lm4$residuals)
+qqline(lm4$residuals)
+```
+
+Except at the ends, for the most part, it appears to be normal.
+
+*3.Constant variability of residuals*
+
+Plotting the residual values against the predicted/fitted values:
+
+```{r}
+plot(lm4$residuals~lm4$fitted.values)
+```
+
+There is no fan shape, so we can assume constant variability of the residuals.
+
+*4.Independent residuals*
+
+Plotting the residuals:
+
+```{r}
+plot(lm4$residuals)
+```
+
+There is no particular order and there is a random scatter.
+
+Therefore, we can conclude that the model satisfies all the 4 conditions necessary for multiple
+linear regressions.
+
+**Interpretation of Coefficients**
+
+Since there are many categorical variables, it is infeasible to look at the coefficients individually.
+
+Taking one variable from each type, consider the numerical variable runtime. It has a coefficient of 0.011173, with a standard error of 0.002076. It has a t-statistic of 5.382, and a p-value of 1.04e-07.
+
+This can be interpreted as: A one unit increase in runtime will cause a 0.011173 increase in the response variable imdb_rating, with a prediction interval of $0.011173\pm5.382*0.002076$.
+
+Now consider the categorical variable best_dir_win. The non-reference level i.e. one which is included in the RStudio output is yes. That is, the reference level is no. It has a coefficient of 0.346809, with a standard error of 0.148494. It has a t-statistic of 2.336, and a p-value of 0.019830.
+
+This means: If the director of a movie has won an award for the film, it will cause a 0.346809 increase in the Imdb rating of the movie, with a prediction interval of $0.346809\pm2.336*0.148494$.
+
+* * *
+
+## Part 5: Prediction
+
+Now for prediction.
+
+2016 had a lot of blockbuster movies, as well as critically acclaimed movies, so there are almost too many choices.
+
+I will be using the data of Deadpool (2016) to predict the imdb score accurately.
+
+* * *
+```{r}
+deadp=data.frame(genre="Comedy",runtime=108,mpaa_rating="R",best_dir_win="no",best_pic_nom="no",best_pic_win="no")
+predict(lm4,deadp)
+```
+
+So the prediction is a very low 5.96, which is appx 6.0. Whereas the actual movie rating was 8.0. Let us check what the prediction is if the genre is changed from "Comedy" to "Action & Adventure".
+
+```{r}
+deadp1=data.frame(genre="Action & Adventure", runtime=108,mpaa_rating="R",best_dir_win="no",best_pic_nom="no",best_pic_win="no")
+predict(lm4,deadp1)
+```
+
+The rating is only slightly higher, around 6.1. 
+
+But let us check the interval:
+
+```{r}
+predict(lm4,deadp,interval="prediction",level=0.95)
+predict(lm4,deadp1,interval="prediction",level=0.95)
+```
+
+Both the intervals have an upper limit very close to the actual value of 8.0, which is not a bad prediction, considering Deadpool was actually a very different movie, making it much more likeable than can be expressed in this model. 
+
+Source of Deadpool info: https://www.imdb.com/title/tt1431045/?ref_=adv_li_tt
+
+Let us try another movie, and see if we can predict the imdb score:
+
+Moonlight(2016):
+
+```{r}
+moonl=data.frame(genre="Drama",runtime=111,mpaa_rating="R",best_dir_win="yes",best_pic_nom="yes",best_pic_win="yes")
+predict(lm4,moonl)
+```
+
+This is actually slightly higher than the actual imdb rating of 7.4. 
+
+The interval for prediction:
+
+```{r}
+predict(lm4,moonl,interval="prediction",level=0.95)
+```
+
+The actual value of 7.4 is actually well within the 95% confidence level.
+
+```{r}
+predict(lm4,moonl,interval="prediction",level=0.50)
+```
+
+Even with 50% confidence level, the actual value of 7.4 is between the higher and lower values.
+
+Source for Moonlight data: https://www.imdb.com/title/tt4975722/
+
+## Part 6: Conclusion
+
+In conclusion, we have found that out of the variables we have selected, some of them very highly insignificant, such as if the actor or actress has won an Oscar. It may not be altogether insignificant, just not significant with this combination of variables. The year of release in theatres was also insignificant here. 
+
+We can say that there is a correlation between the variables *genre,runtime,MPAA Rating,Best Director Win, Best Picture Nomination and Best Picture Win*, with the imdb score. Although we cannot be 100% sure to generalize to all the movies, and we definitely cannot infer causality.
+
+The model creted had an $R^2$ value of 0.3274, meaning 32.74% of the variability in the response variable can be explained by the model. The p-value is very small, $< 2.2e^-16$. 
+
+There are a few shortcomings with this method as well. Obviously, not all the variables were considered. This was purely my choice, and done for simplicity, so this may not be the most optimum model. Also, the sample size was only 650 when there are a vast number of movies being released every day, all around the world. Taking movies of different languages as well released in the US might help perhaps. 
+
+But, at least now, I have a simple way of choosing my next movie. 
